@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Orbius helper</title>
+<style>
+body{font:17px system-ui,-apple-system,Segoe UI,Arial,sans-serif;margin:0;padding:16px;background:#f3f5f8;color:#14202e}
+h1{font-size:19px;margin:0 0 12px}button{font:inherit;padding:14px 18px;border-radius:12px;border:1px solid #cfd6df;background:#fff;margin:4px 6px 4px 0;min-height:52px}
+button.p{background:#0f2a43;color:#fff;border-color:#0f2a43}button.rec{background:#fde8e6;border-color:#c0392b;color:#c0392b}
+textarea{width:100%;min-height:170px;font:inherit;padding:12px;border:1px solid #cfd6df;border-radius:12px;box-sizing:border-box}
+#msg{margin:12px 0;color:#444;min-height:24px}.big{font-size:20px;font-weight:600;margin:12px 0}
+</style></head><body>
+<h1 id="title"></h1>
+<div id="dict" hidden><button id="mic" class="p"></button><textarea id="txt"></textarea><div><button id="ins" class="p"></button><button id="cp"></button></div></div>
+<div id="gpsbox" hidden><button id="gpsbtn" class="p"></button><div id="coords" class="big"></div><button id="gpssend" hidden class="p"></button></div>
+<div id="msg"></div>
+<script>
+var q=new URLSearchParams(location.search),mode=q.get('mode')==='gps'?'gps':'dictate',lang=q.get('lang')==='en'?'en':'es',path=q.get('path')||'',target=q.get('o')||'*';
+var TXT={
+ es:{tDict:'Dictado por voz',tGps:'Ubicaci\u00f3n GPS',start:'\ud83c\udfa4 Empezar a dictar',stop:'\u23f9 Parar',ins:'Insertar en el informe',cp:'Copiar',gps:'\ud83d\udccd Obtener mi ubicaci\u00f3n',send:'Enviar al informe',
+  sent:'Enviado. Ya puedes cerrar esta pesta\u00f1a y volver al informe.',noOpener:'No se pudo enviar autom\u00e1ticamente. Pulsa Copiar, vuelve al informe y pega el texto.',
+  noSpeech:'Este navegador no puede dictar. Toca el cuadro de texto y usa el micr\u00f3fono del teclado del m\u00f3vil.',err:'Error de voz: ',locating:'Buscando tu ubicaci\u00f3n...',got:'Ubicaci\u00f3n obtenida.',gpsErr:'No se pudo obtener la ubicaci\u00f3n: ',copied:'Copiado.',empty:'No hay texto que enviar.'},
+ en:{tDict:'Voice dictation',tGps:'GPS location',start:'\ud83c\udfa4 Start dictating',stop:'\u23f9 Stop',ins:'Insert in the report',cp:'Copy',gps:'\ud83d\udccd Get my location',send:'Send to the report',
+  sent:'Sent. You can close this tab and go back to the report.',noOpener:'Could not send automatically. Tap Copy, go back to the report and paste the text.',
+  noSpeech:'This browser cannot dictate. Tap the text box and use the microphone key on your phone keyboard.',err:'Voice error: ',locating:'Finding your location...',got:'Location found.',gpsErr:'Could not get the location: ',copied:'Copied.',empty:'There is no text to send.'}};
+var L=TXT[lang];function $(id){return document.getElementById(id)}
+function send(m){m.src='orb-helper';m.path=path;
+ if(window.opener&&!window.opener.closed){try{window.opener.postMessage(m,target);$('msg').textContent=L.sent;setTimeout(function(){try{window.close()}catch(e){}},1200);return true}catch(e){}}
+ $('msg').textContent=L.noOpener;return false}
+$('title').textContent=mode==='gps'?L.tGps:L.tDict;
+if(mode==='gps'){
+ $('gpsbox').hidden=false;$('gpsbtn').textContent=L.gps;$('gpssend').textContent=L.send;var fix=null;
+ $('gpsbtn').onclick=function(){$('msg').textContent=L.locating;
+  navigator.geolocation.getCurrentPosition(function(p){fix={type:'gps',lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy};
+   $('coords').textContent=fix.lat.toFixed(6)+', '+fix.lng.toFixed(6)+' (+/-'+Math.round(fix.acc)+' m)';$('msg').textContent=L.got;$('gpssend').hidden=false;send(fix)},
+  function(e){$('msg').textContent=L.gpsErr+e.message},{enableHighAccuracy:true,timeout:20000})};
+ $('gpssend').onclick=function(){if(fix)send(fix)};
+}else{
+ $('dict').hidden=false;$('mic').textContent=L.start;$('ins').textContent=L.ins;$('cp').textContent=L.cp;
+ var SR=window.SpeechRecognition||window.webkitSpeechRecognition,rec=null,fin='',on=false;
+ function begin(){if(!SR){$('msg').textContent=L.noSpeech;$('txt').focus();return}
+  rec=new SR();rec.lang=lang==='en'?'en-US':'es-ES';rec.continuous=true;rec.interimResults=true;
+  rec.onresult=function(e){var interim='';for(var i=e.resultIndex;i<e.results.length;i++){var r=e.results[i];if(r.isFinal)fin+=(fin?' ':'')+r[0].transcript.trim();else interim+=r[0].transcript}
+   $('txt').value=fin+(interim?(fin?' ':'')+interim:'')};
+  rec.onerror=function(e){if(e.error!=='no-speech'&&e.error!=='aborted')$('msg').textContent=L.err+e.error};
+  rec.onend=function(){on=false;$('mic').classList.remove('rec');$('mic').textContent=L.start};
+  try{rec.start();on=true;$('mic').classList.add('rec');$('mic').textContent=L.stop}catch(e){$('msg').textContent=L.err+e.message}}
+ $('mic').onclick=function(){if(on&&rec){rec.stop()}else{fin=$('txt').value.trim();begin()}};
+ $('ins').onclick=function(){var t=$('txt').value.trim();if(!t){$('msg').textContent=L.empty;return}if(on&&rec)rec.stop();send({type:'text',text:t})};
+ $('cp').onclick=function(){var t=$('txt').value;try{navigator.clipboard.writeText(t).then(function(){$('msg').textContent=L.copied})}catch(e){$('txt').select();document.execCommand('copy');$('msg').textContent=L.copied}};
+}
+</script></body></html>
